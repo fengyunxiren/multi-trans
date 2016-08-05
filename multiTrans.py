@@ -40,18 +40,18 @@ class BaseTransport(object):
         output.flush()
 
 
-    def _progressBarShow(self,file_name,file_size,time_down_start):
+    def _progressBarShow(self,file_name,file_size,time_down_start,get_file_size=os.stat):
         while 1:
             rate_time = time.time()
             if os.path.exists(file_name):
-                rate_size = os.stat(file_name).st_size
+                rate_size = get_file_size(file_name).st_size
                 break
             if rate_time - time_down_start > 10:
                 print("Some wrong was happen")
                 exit(1)
             time.sleep(0.1)
         while 1:
-            file_recive_size = os.stat(file_name).st_size
+            file_recive_size = get_file_size(file_name).st_size
             time_interval = time.time() - rate_time
             rate_time = time.time()
             count = file_recive_size / (file_size / 100)
@@ -129,6 +129,26 @@ class SFTPTransport(BaseTransport):
 
 
 
+    def upload(self,local_path,remote_path):
+        if os.path.isdir(local_path):
+            tar_name='/tmp/'+self.__randomString(16)+'.tar'
+            tar_name=str(tar_name)
+            tar_dir=local_path.strip('/').split('/')[-1]
+            local_dir='/'+'/'.join(local_path.strip('/').split('/')[:-1])
+            os.system('cd %s;tar cvf %s %s >/dev/null' % (local_dir,tar_name,tar_dir))
+            self._sftp.put(tar_name,tar_name)
+            os.system('rm -rf %s' % tar_name)
+            self._ssh.exec_command('tar xvf %s -C %s >/dev/null' % (tar_name,remote_path))
+            self._ssh.exec_command('rm -rf %s' % tar_name)
+        else:
+            file_name = '/'+remote_path.strip('/')+'/'+os.path.basename(local_path)
+            file_size = os.stat(local_path).st_size
+            time_down_start = time.time()
+            thread.start_new_thread(self._progressBarShow,(file_name,file_size,time_down_start,self._sftp.stat))
+            self._sftp.put(local_path,file_name)
+
+
+
     def __randomString(self,num):
         return ''.join(random.sample(string.ascii_letters+string.digits,num))
         
@@ -136,4 +156,5 @@ class SFTPTransport(BaseTransport):
 
 if __name__ == '__main__':
     connect=SFTPTransport('10.0.0.17',22,'feng','airation')
-    connect.download('/home/feng/Transfile/fragment','/home/cn01/test')
+    #connect.download('/home/feng/Transfile/fragment','/home/cn01/test')
+    connect.upload('/home/cn01/test','/home/feng/test')

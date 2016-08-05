@@ -38,9 +38,6 @@ class BaseTransport(object):
         output.write(']    ')
         output.write('%6.2f M/s' % rate)
         output.flush()
-       # if count == 100:
-       #     print('\n')
-       #     return
 
 
     def _progressBarShow(self,file_name,file_size,time_down_start):
@@ -58,7 +55,7 @@ class BaseTransport(object):
             time_interval = time.time() - rate_time
             rate_time = time.time()
             count = file_recive_size / (file_size / 100)
-            rate = (file_recive_size - rate_size) / 1024 / 1024/time_interval
+            rate = (file_recive_size - rate_size) / time_interval / 1024 / 1024
             rate_size = file_recive_size
             self._viewBar(count,rate)
             if file_recive_size == file_size:
@@ -108,8 +105,12 @@ class SFTPTransport(BaseTransport):
                 later_size = self._sftp.stat(tar_name).st_size
                 if later_size == start_size:
                     break
-                start_sezie = later_size
+                start_size= later_size
                 time.sleep(0.1)
+
+            thread.start_new_thread(self._progressBarShow,(tar_name,start_size,start_time))
+	   
+           
 
             self._sftp.get(tar_name,tar_name)
             self._ssh.exec_command('rm -rf %s' % tar_name)
@@ -125,38 +126,6 @@ class SFTPTransport(BaseTransport):
 
             thread.start_new_thread(self._sftp.get,(remote_path,file_name))
             self._progressBarShow(file_name,file_size,time_down_start)
-    #        while 1:
-    #            rate_time = time.time()
-    #            if os.path.exists(file_name):
-    #                rate_size = os.stat(file_name).st_size
-    #                break
-    #            if rate_time - time_down_start > 10:
-    #                print("Some wrong was happen")
-    #                exit(1)
-    #            time.sleep(0.1)
-    #        print rate_size
-    #        while 1:
-    #            file_recive_size = os.stat(file_name).st_size
-    #            time_interval = time.time() - rate_time
-    #            rate_time = time.time()
-    #            count = file_recive_size / (file_size / 100)
-    #            rate = (file_recive_size - rate_size) / 1024 / 1024/time_interval
-    #            rate_size = file_recive_size
-    #            self._viewBar(count,rate)
-    #            if file_recive_size == file_size:
-    #                break
-    #            time.sleep(0.18)
-    #        
-    #        total_time = time.time() - time_down_start
-    #        average_speed = file_size / 1024 /1024 /total_time
-    #        print("Time spend: %.2f s" % total_time)
-    #        print("File size: %.2f M" % (file_size / 1024 /1024))
-    #        print("Average speed: %.2f M/s" % average_speed)
-
-
-
-
-
 
 
 
@@ -166,5 +135,5 @@ class SFTPTransport(BaseTransport):
 
 
 if __name__ == '__main__':
-    connect=SFTPTransport('cn02',22,'cn02','airation')
-    connect.download('/home/cn02/test/test.tar','/home/feng/test')
+    connect=SFTPTransport('10.0.0.17',22,'feng','airation')
+    connect.download('/home/feng/Transfile/fragment','/home/cn01/test')

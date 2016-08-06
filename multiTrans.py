@@ -7,6 +7,7 @@ import string
 import random
 import stat
 import thread
+from ftplib import FTP
 
 
 
@@ -40,6 +41,42 @@ class BaseTransport(object):
         output.flush()
 
 
+    def _progressBarShow(self,file_name,file_size,time_down_start,read_size=os):
+        base_dir = '/' + '/'.join(file_name.strip('/').split('/')[:-1])
+        base_name = os.path.basename(file_name)
+        while 1:
+            rate_time = time.time()
+            if (read_size == os and os.path.exists(file_name)):
+                rate_size = read_size.stat(file_name).st_size
+                break
+            elif (base_name in read_size.listdir(base_dir)):
+                rate_size = read_size.stat(file_name).st_size
+                break
+
+            
+            if rate_time - time_down_start > 10:
+                print("Some wrong was happen")
+                exit(1)
+            time.sleep(0.1)
+        while 1:
+            file_recive_size = read_size.stat(file_name).st_size
+            time_interval = time.time() - rate_time
+            rate_time = time.time()
+            count = file_recive_size / (file_size / 100)
+            rate = (file_recive_size - rate_size) / time_interval / 1024 / 1024
+            rate_size = file_recive_size
+            self._viewBar(count,rate)
+            if file_recive_size == file_size:
+                break
+            time.sleep(0.18)
+
+        total_time = time.time() - time_down_start
+        average_speed = file_size / 1024 /1024 /total_time
+        self._viewBar(100,average_speed)
+        print("\n")
+        print("Time spend: %.2f s" % total_time)
+        print("File size: %.2f M" % (file_size / 1024 /1024))
+        print("Average speed: %.2f M/s" % average_speed)
 
 
 
@@ -186,11 +223,74 @@ class SCPTransport(BaseTransport):
     def upload(self,local_path,remote_path):
         os.system('scp -r %s %s@%s:%s' % (local_path,self._user,self._host,remote_path))
 
+
+
+class FTPTransport(BaseTransport):
+    def __init__(self,host,port,user,password):
+        super(FTPTransport,self).__init__(host,port,user,password)
+        #self._ftp = None
+        self.__connectHost()
+
+
+    def __del__(self):
+        if self._ftp:
+            self._ftp.close()
+
+
+
+    def __connectHost(self):
+        self._ftp = FTP()
+        self._ftp.set_debuglevel(1)
+        self._ftp.connect(self._host,self._port)
+        self._ftp.login(self._user,self._password)
+
+
+
+    def download(self,remote_path,local_path):
+        remote_dir = os.path.dirname(remote_path)
+        remote_file = os.path.basename(remote_path)
+        local_file = '/' + local_path.strip('/') + '/' + remote_file
+        bufsize = 1024
+
+        file_list= []
+        self._ftp.dir(remote_dir,file_list.append)
+        for name in file_list:
+             file_name = name.split()
+             if file_name[-1] == remote_file:
+                 if file_name[0][0] == 'd':
+                     os.system('mkdir -p %s' % local_file)
+                     self._ftp.cwd(remote_path)
+                     trans_files = self._ftp.nlst()
+                     for trans_file in trans_files:
+                         self.download(remote_path+'/'+trans_file,local_file)
+                 else:
+                     self._ftp.cwd(remote_dir)
+                     file_handler = open(local_file,'wb').write
+                     file_size = self._ftp.size(remote_path)
+                     time_down_start = time.time()
+                     self._ftp.retrbinary('RETR %s' % remote_file,file_handler,bufsize)
+
+        #thread.start_new_thread(self._ftp.retrbinary,('RETR %s' % remote_file,file_handler,bufsize))
+        #self._progressBarShow(local_file,file_size,time_down_start)
+
+
+    def upload(self,local_path,remote_path):
+        self._ftp.cwd(remote_path)
+        bufsize =1024
+        file_handler = open(local_path,'rb')
+        self._ftp.storbinary('STOR %s' % os.path.basename(local_path),file_handler,bufsize)
+        file_handler.close()
+
+
 if __name__ == '__main__':
     #connect=SFTPTransport('cn02',22,'cn02','airation')
     #connect.download('/home/cn02/test/test.tar','/home/feng/test')
     #connect.upload('/home/feng/Transfile/fragment_cn05','/home/cn02/test')
-    connect = SCPTransport('cn02',22,'cn02','')
+    #connect = SCPTransport('cn02',22,'cn02','')
     #connect.download('/home/cn02/test/test.tar','/home/feng/test')
-    connect.upload('/home/feng/test/test.tar','/home/cn02/test')
+    #connect.upload('/home/feng/test/test.tar','/home/cn02/test')
+    #connect.download('/home/cn02/test/test.tar','/home/feng/test')
+    connect = FTPTransport('cn02',21,'cn02','airation')
+    connect.download('/home/cn02/test/test','home/feng/test')
+    #connect.upload('/home/feng/test/test.tar','/home/cn02/test/')
 

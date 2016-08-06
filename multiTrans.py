@@ -7,6 +7,7 @@ import string
 import random
 import stat
 import thread
+import threading
 from ftplib import FTP
 
 
@@ -240,7 +241,7 @@ class FTPTransport(BaseTransport):
 
     def __connectHost(self):
         self._ftp = FTP()
-        self._ftp.set_debuglevel(1)
+#        self._ftp.set_debuglevel(1)
         self._ftp.connect(self._host,self._port)
         self._ftp.login(self._user,self._password)
 
@@ -252,34 +253,64 @@ class FTPTransport(BaseTransport):
         local_file = '/' + local_path.strip('/') + '/' + remote_file
         bufsize = 1024
 
-        file_list= []
-        self._ftp.dir(remote_dir,file_list.append)
-        for name in file_list:
-             file_name = name.split()
-             if file_name[-1] == remote_file:
-                 if file_name[0][0] == 'd':
-                     os.system('mkdir -p %s' % local_file)
-                     self._ftp.cwd(remote_path)
-                     trans_files = self._ftp.nlst()
-                     for trans_file in trans_files:
-                         self.download(remote_path+'/'+trans_file,local_file)
-                 else:
-                     self._ftp.cwd(remote_dir)
-                     file_handler = open(local_file,'wb').write
-                     file_size = self._ftp.size(remote_path)
-                     time_down_start = time.time()
-                     self._ftp.retrbinary('RETR %s' % remote_file,file_handler,bufsize)
+        #file_list= []
+        #self._ftp.dir(remote_dir,file_list.append)
+        #for name in file_list:
+        #     file_name = name.split()
+        #     if file_name[-1] == remote_file:
+        #         if file_name[0][0] == 'd':
+        #             os.system('mkdir -p %s' % local_file)
+        #             self._ftp.cwd(remote_path)
+        #             trans_files = self._ftp.nlst()
+        #             for trans_file in trans_files:
+        #                 self.download(remote_path+'/'+trans_file,local_file)
+        #         else:
+        #             self._ftp.cwd(remote_dir)
+        #             file_handler = open(local_file,'wb').write
+        #             file_size = self._ftp.size(remote_path)
+        #             time_down_start = time.time()
+        #             self._ftp.retrbinary('RETR %s' % remote_file,file_handler,bufsize)
+        file_list = self._ftp.nlst(remote_path)
+        if len(file_list) > 1 or file_list[0] != remote_path:
+             os.system('mkdir -p %s' % local_file)
+             self._ftp.cwd(remote_path)
+             trans_files = self._ftp.nlst()
+             for trans_file in trans_files:
+                 trans_path = '/' + remote_path.strip('/') + '/' + trans_file
+                 self.download(trans_path,local_file)
+        else:
+             self._ftp.cwd(remote_dir)
+             file_handler = open(local_file,'wb').write
+             file_size = self._ftp.size(remote_path)
+             print file_size
+             time_down_start = time.time()
+             #thread.start_new_thread(self._progressBarShow,(local_file,file_size,time_down_start))
+             #t1 = threading.Thread(target = self._progressBarShow,args = (local_file,file_size,time_down_start))
+             #t1.start()
+             if file_size > 0:
+                 threading.Thread(target = self._progressBarShow,args = (local_file,file_size,time_down_start)).start()
+             self._ftp.retrbinary('RETR %s' % remote_file,file_handler,bufsize)
+             #thread.start_new_thread(self._ftp.retrbinary,('RETR %s' % remote_file,file_handler,bufsize))
+             #self._progressBarShow(local_file,file_size,time_down_start)
 
-        #thread.start_new_thread(self._ftp.retrbinary,('RETR %s' % remote_file,file_handler,bufsize))
-        #self._progressBarShow(local_file,file_size,time_down_start)
+
 
 
     def upload(self,local_path,remote_path):
-        self._ftp.cwd(remote_path)
-        bufsize =1024
-        file_handler = open(local_path,'rb')
-        self._ftp.storbinary('STOR %s' % os.path.basename(local_path),file_handler,bufsize)
-        file_handler.close()
+        if os.path.isdir(local_path):
+            save_path = '/' + remote_path.strip('/') +'/' + os.path.basename(local_path)
+            self._ftp.mkd(save_path)
+            self._ftp.cwd(save_path)
+            trans_files = os.listdir(local_path)
+            for trans_file in trans_files:
+                trans_path = '/' + local_path.strip('/') + '/' + trans_file
+                self.upload(trans_path,save_path)
+        else:
+            self._ftp.cwd(remote_path)
+            bufsize =1024
+            file_handler = open(local_path,'rb')
+            self._ftp.storbinary('STOR %s' % os.path.basename(local_path),file_handler,bufsize)
+            file_handler.close()
 
 
 if __name__ == '__main__':
@@ -291,6 +322,6 @@ if __name__ == '__main__':
     #connect.upload('/home/feng/test/test.tar','/home/cn02/test')
     #connect.download('/home/cn02/test/test.tar','/home/feng/test')
     connect = FTPTransport('cn02',21,'cn02','airation')
-    connect.download('/home/cn02/test/test','home/feng/test')
-    #connect.upload('/home/feng/test/test.tar','/home/cn02/test/')
+    connect.download('/home/cn02/test/fragment','home/feng/test')
+    #connect.upload('/home/feng/test/test','/home/cn02/test/')
 

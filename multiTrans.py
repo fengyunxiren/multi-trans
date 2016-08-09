@@ -25,6 +25,56 @@ OPCODE_OACK = 6
 ERROR = 1
 SUCCESS = 0 
 
+class FileAttribute(object):
+    def __init__(self):
+        self._file_size = 0
+        self._file_exist = False
+
+    def getFileSize(self,path):
+        self._file_size = os.stat(path).st_size
+        return self._file_size
+
+    def fileExist(self,path):
+        self._file_exist = os.path.exists(path)
+        return self._file_exist
+    
+
+class SFTPFileAttribute(FileAttribute):
+    def __init__(self,sftp):
+        super(SFTPFileAttribute,self).__init__()
+        self.sftp = sftp
+
+    def getFileSize(self,path):
+        self._file_size = self.sftp.stat(path).st_size
+        return self._file_size
+
+    def fileExist(self,path):
+        base_dir = os.path.dirname(path)
+        base_name = os.path.basename(path)
+
+        if base_name in self.sftp.listdir(base_dir):
+            return True
+        else:
+            return False
+        
+class FTPFileAttribute(FileAttribute):
+    def __init__(self,ftp):
+        super(FTPFileAttribute,self).__init__()
+        self.ftp = ftp
+
+    def getFileSize(self,path):
+        self._file_size = self.ftp.size(path)
+        return self._file_size
+
+    def fileExist(self,path):
+        base_dir = os.path.dirname(path)
+        base_name = os.path.basename(path)
+        self.ftp.cwd(base_dir)
+        if base_name in self.ftp.nlst():
+            return True
+        else:
+            return False
+
 class BaseTransport(object):
     def __init__(self,host,port,user,password):
         self._host = host
@@ -34,34 +84,75 @@ class BaseTransport(object):
 
 
     def _viewBar(self,count,rate,rate_units = 'Kb/s',get_size = '',total_size = '',used_time = ''):
-        output = sys.stdout
-        output.flush()
-        output.write('\r %d%%' % count)
+        #sys.out = sys.stdout
+        sys.stdout.write('\r%d%%' % count)
         if count < 10:
-            output.write('  ')
+            sys.stdout.write('  ')
         elif count < 100:
-            output.write(' ')
-        output.write('[')
+            sys.stdout.write(' ')
+        sys.stdout.write('[')
         length_bar = 50
         i = length_bar * count / 100
-        output.write(i * '>' + (length_bar - i) * ' ')
-        output.write(']  ')
-        output.write('%s/%s Kb' % (get_size,total_size))
-        output.write('  %6.2f ' % rate + rate_units)
-        output.write('  %.0f s' % used_time)
-        output.flush()
+        sys.stdout.write(i * '>' + (length_bar - i) * ' ')
+        sys.stdout.write(']  ')
+        sys.stdout.write('%s/%s Kb' % (get_size,total_size))
+        sys.stdout.write('  %6.2f ' % rate + rate_units)
+        sys.stdout.write('  %.0f s' % used_time)
+        sys.stdout.flush()
 
-    def _progressBarShow(self,file_name,file_size,time_down_start,read_size=os):
-        base_dir = os.path.basename(file_name)
+    #def _progressBarShow(self,file_name,file_size,time_down_start,read_size=os):
+    #    base_dir = os.path.dirname(file_name)
+    #    base_name = os.path.basename(file_name)
+
+    #    while True:
+    #        rate_time = time.time()
+    #        if (read_size == os and os.path.exists(file_name)):
+    #            rate_size = read_size.stat(file_name).st_size
+    #            break
+    #        elif (base_name in read_size.listdir(base_dir)):
+    #            rate_size = read_size.stat(file_name).st_size
+    #            break
+    #        if rate_time - time_down_start > 10:
+    #            print("File %s not exist in %s" % (base_name,base_dir))
+    #            exit(1)
+    #        time.sleep(0.1)
+#
+#        while True:
+#            file_receive_size = read_size.stat(file_name).st_size
+#            time_interval = time.time() - rate_time
+#            rate_time = time.time()
+#            count = file_receive_size / (file_size / 100)
+#            rate = (file_receive_size - rate_size) / time_interval / 1024
+#            rate_size = file_receive_size
+#            time_left = (file_size - file_receive_size) / 1024 / (1 if rate == 0 else rate)
+#            if rate > 1024:
+#                rate /= 1024
+#                self._viewBar(count,rate,'Mb/s',file_receive_size/1024,file_size/1024,time_left)
+#            else:
+#                self._viewBar(count,rate,get_size = file_receive_size/1024,total_size = file_size/1024,used_time = time_left)
+#            if file_receive_size == file_size:
+#                break
+#            time.sleep(1.0)
+
+#        total_time = time.time() - time_down_start
+#        average_speed = file_size / 1024 / total_time
+#        rate_units = 'Kb/s'
+#        if average_speed > 1024:
+#            average_speed /= 1024
+#            rate_units = 'Mb/s'
+#            self._viewBar(100,average_speed,rate_units,file_receive_size/1024,file_size/1024,total_time)
+#        else:
+#            self._viewBar(100,average_speed,get_size = file_receive_size/1024,total_size = file_size/1024,used_time = total_time)
+#        print("\n")
+
+    def _progressBarShow(self,file_name,file_size,time_down_start,file_attribute = FileAttribute()):
+        base_dir = os.path.dirname(file_name)
         base_name = os.path.basename(file_name)
 
         while True:
             rate_time = time.time()
-            if (read_size == os and os.path.exists(file_name)):
-                rate_size = read_size.stat(file_name).st_size
-                break
-            elif (base_name in read_size.listdir(base_dir)):
-                rate_size = read_size.stat(file_name).st_size
+            if file_attribute.fileExist(file_name):
+                rate_size = file_attribute.getFileSize(file_name)
                 break
             if rate_time - time_down_start > 10:
                 print("File %s not exist in %s" % (base_name,base_dir))
@@ -69,7 +160,7 @@ class BaseTransport(object):
             time.sleep(0.1)
 
         while True:
-            file_receive_size = read_size.stat(file_name).st_size
+            file_receive_size = file_attribute.getFileSize(file_name)
             time_interval = time.time() - rate_time
             rate_time = time.time()
             count = file_receive_size / (file_size / 100)
@@ -83,7 +174,7 @@ class BaseTransport(object):
                 self._viewBar(count,rate,get_size = file_receive_size/1024,total_size = file_size/1024,used_time = time_left)
             if file_receive_size == file_size:
                 break
-            time.sleep(0.8)
+            time.sleep(1.0)
 
         total_time = time.time() - time_down_start
         average_speed = file_size / 1024 / total_time
@@ -95,7 +186,6 @@ class BaseTransport(object):
         else:
             self._viewBar(100,average_speed,get_size = file_receive_size/1024,total_size = file_size/1024,used_time = total_time)
         print("\n")
-
 
 class SFTPTransport(BaseTransport):
     def __init__(self,host,port,user,password):
@@ -123,7 +213,7 @@ class SFTPTransport(BaseTransport):
 
             start_size = self._sftp.stat(tar_name).st_size
             start_time = time.time()
-            while 1:
+            while True:
                 if (time.time() - start_time) > 3600:
                     print("The file is too big or something wrong happened")
                     exit(1)
@@ -164,8 +254,12 @@ class SFTPTransport(BaseTransport):
             os.system('cd %s;tar cvf %s %s >/dev/null' % (local_dir,tar_name,tar_dir))
             file_size = os.stat(tar_name).st_size   
             thread.start_new_thread(self._sftp.put,(tar_name,tar_name))
+            ######
             new_sftp = self._ssh.open_sftp()
-            self._progressBarShow(tar_name,file_size,time_down_start,new_sftp)
+            file_attribute = SFTPFileAttribute(new_sftp)
+            self._progressBarShow(tar_name,file_size,time_down_start,file_attribute)
+
+            #self._progressBarShow(tar_name,file_size,time_down_start,new_sftp)
             new_sftp.close()
             os.system('rm -rf %s' % tar_name)
             self._ssh.exec_command('tar xvf %s -C %s >/dev/null;rm -rf %s' % (tar_name,remote_path,tar_name))
@@ -177,7 +271,10 @@ class SFTPTransport(BaseTransport):
 
             thread.start_new_thread(self._sftp.put,(local_path,file_name))
             new_sftp = self._ssh.open_sftp()
-            self._progressBarShow(file_name,file_size,time_down_start,new_sftp)
+            ###
+            file_attribute = SFTPFileAttribute(new_sftp)
+            self._progressBarShow(file_name,file_size,time_down_start,file_attribute)
+            #self._progressBarShow(file_name,file_size,time_down_start,new_sftp)
             new_sftp.close()
             
 
@@ -187,43 +284,6 @@ class SFTPTransport(BaseTransport):
     def __randomString(self,num):
         return ''.join(random.sample(string.ascii_letters+string.digits,num))
 
-
-   # def _progressBarShow(self,file_name,file_size,time_down_start,read_size=os):
-   #     base_dir = '/' + '/'.join(file_name.strip('/').split('/')[:-1])
-   #     base_name = os.path.basename(file_name)
-   #     while 1:
-   #         rate_time = time.time()
-   #         if (read_size == os and os.path.exists(file_name)):
-   #             rate_size = read_size.stat(file_name).st_size
-   #             break
-   #         elif (base_name in read_size.listdir(base_dir)):
-   #             rate_size = read_size.stat(file_name).st_size
-   #             break
-
-            
-#            if rate_time - time_down_start > 10:
-#                print("Some wrong was happen")
-#                exit(1)
-#            time.sleep(0.1)
-#        while 1:
-#            file_recive_size = read_size.stat(file_name).st_size
-#            time_interval = time.time() - rate_time
-#            rate_time = time.time()
-#            count = file_recive_size / (file_size / 100)
-#            rate = (file_recive_size - rate_size) / time_interval / 1024 / 1024
-#            rate_size = file_recive_size
-#            self._viewBar(count,rate)
-#            if file_recive_size == file_size:
-#                break
-#            time.sleep(0.18)
-#
-#        total_time = time.time() - time_down_start
-#        average_speed = file_size / 1024 /1024 /total_time
-#        self._viewBar(100,average_speed)
-#        print("\n")
-#        print("Time spend: %.2f s" % total_time)
-#        print("File size: %.2f M" % (file_size / 1024 /1024))
-#        print("Average speed: %.2f M/s" % average_speed)
 
 
 
@@ -245,7 +305,6 @@ class SCPTransport(BaseTransport):
 class FTPTransport(BaseTransport):
     def __init__(self,host,port,user,password):
         super(FTPTransport,self).__init__(host,port,user,password)
-        #self._ftp = None
         self.__connectHost()
 
 
@@ -268,24 +327,6 @@ class FTPTransport(BaseTransport):
         remote_file = os.path.basename(remote_path)
         local_file = '/' + local_path.strip('/') + '/' + remote_file
         bufsize = 1024
-
-        #file_list= []
-        #self._ftp.dir(remote_dir,file_list.append)
-        #for name in file_list:
-        #     file_name = name.split()
-        #     if file_name[-1] == remote_file:
-        #         if file_name[0][0] == 'd':
-        #             os.system('mkdir -p %s' % local_file)
-        #             self._ftp.cwd(remote_path)
-        #             trans_files = self._ftp.nlst()
-        #             for trans_file in trans_files:
-        #                 self.download(remote_path+'/'+trans_file,local_file)
-        #         else:
-        #             self._ftp.cwd(remote_dir)
-        #             file_handler = open(local_file,'wb').write
-        #             file_size = self._ftp.size(remote_path)
-        #             time_down_start = time.time()
-        #             self._ftp.retrbinary('RETR %s' % remote_file,file_handler,bufsize)
         file_list = self._ftp.nlst(remote_path)
         if len(file_list) > 1 or file_list[0] != remote_path:
              os.system('mkdir -p %s' % local_file)
@@ -300,13 +341,9 @@ class FTPTransport(BaseTransport):
              file_size = self._ftp.size(remote_path)
              time_down_start = time.time()
              #thread.start_new_thread(self._progressBarShow,(local_file,file_size,time_down_start))
-             #t1 = threading.Thread(target = self._progressBarShow,args = (local_file,file_size,time_down_start))
-             #t1.start()
-             thread.start_new_thread(self._progressBarShow,(local_file,file_size,time_down_start))
-             self._ftp.retrbinary('RETR %s' % remote_file,file_handler,bufsize)
-             #thread.start_new_thread(self._ftp.retrbinary,('RETR %s' % remote_file,file_handler,bufsize))
-             #self._progressBarShow(local_file,file_size,time_down_start)
-
+             #self._ftp.retrbinary('RETR %s' % remote_file,file_handler,bufsize)
+             thread.start_new_thread(self._ftp.retrbinary,('RETR %s' % remote_file,file_handler,bufsize))
+             self._progressBarShow(local_file,file_size,time_down_start)
 
 
 
@@ -322,8 +359,18 @@ class FTPTransport(BaseTransport):
         else:
             self._ftp.cwd(remote_path)
             bufsize =1024
+            file_name = '/' + remote_path.strip('/') + '/' + os.path.basename(local_path)
+            file_size = os.stat(local_path).st_size
+            time_down_start = time.time()
+            new_ftp = FTP()
+            new_ftp.connect(self._host,self._port)
+            new_ftp.login(self._user,self._password)
+            file_attribute = FTPFileAttribute(new_ftp)
+            #thread.start_new_thread(self._progressBarShow,(file_name,file_size,time_down_start,file_attribute))
             file_handler = open(local_path,'rb')
-            self._ftp.storbinary('STOR %s' % os.path.basename(local_path),file_handler,bufsize)
+            #self._ftp.storbinary('STOR %s' % os.path.basename(local_path),file_handler,bufsize)
+            thread.start_new_thread(self._ftp.storbinary,('STOR %s' % os.path.basename(local_path),file_handler,bufsize))
+            self._progressBarShow(file_name,file_size,time_down_start,file_attribute)
             file_handler.close()
 
 
@@ -406,9 +453,10 @@ class FBTFTPTransport(BaseTransport):
                 return ERROR
 
         file_open=open(path,'wb')
-        rate_time=time.time()
-        rate_size=self._read_size
-        start_time=rate_time
+#        rate_time=time.time()
+#        rate_size=self._read_size
+#        start_time=rate_time
+        thread.start_new_thread(self._progressBarShow,(path,self._options['tsize'],time.time()))
         while True:
             try:
                 self._client_socket.settimeout(self._timeout)
@@ -438,27 +486,25 @@ class FBTFTPTransport(BaseTransport):
                 break
             send_head=struct.pack('!HH',OPCODE_ACK,head[1])
             self._client_socket.sendto(send_head,server_addr)
-            time_interval=time.time()-rate_time
+#            time_interval=time.time()-rate_time
 
-#            print self._read_size
-#            print self._options['tsize']
 
-            if time_interval>0.18:
-                count=self._read_size / (self._options['tsize'] / 100)
-                rate=(self._read_size-rate_size)/1024/1024/time_interval
-                self._viewBar(count,rate)
-                rate_time=time.time()
-                rate_size=self._read_size
+#            if time_interval>0.18:
+#                count=self._read_size / (self._options['tsize'] / 100)
+#                rate=(self._read_size-rate_size)/1024/1024/time_interval
+#                self._viewBar(count,rate)
+##                rate_time=time.time()
+#                rate_size=self._read_size
 
-        file_open.close()
-        total_time=time.time()-start_time
-        count=self._read_size / (self._options['tsize'] / 100)
-        rate=(self._read_size/1024/1024)/total_time
-        self._viewBar(count,rate)
-        print('\nFile size: %.2f (M)' % (self._read_size/1024/1024))
-        print('Spend Time: %.2f (s)' % total_time)
-        print('Average speed: %.2f (M/s)' % rate)
-        self._read_size=0
+#        file_open.close()
+#        total_time=time.time()-start_time
+#        count=self._read_size / (self._options['tsize'] / 100)
+#        rate=(self._read_size/1024/1024)/total_time
+#        self._viewBar(count,rate)
+#        print('\nFile size: %.2f (M)' % (self._read_size/1024/1024))
+#        print('Spend Time: %.2f (s)' % total_time)
+#        print('Average speed: %.2f (M/s)' % rate)
+#        self._read_size=0
         return SUCCESS
 
 
@@ -468,6 +514,7 @@ class FBTFTPTransport(BaseTransport):
         self._sendToServer(remote_path)
         self._receiveFromServer(local_path)
         self._close()
+
     def upload(self,local_path,remote_path):
         print("Now fbtftp can not upload file!")
 
@@ -506,6 +553,9 @@ def main():
             'ftp':FTPTransport,
             'fbtftp':FBTFTPTransport
             }
+    if args.transport not in trans_method:
+        print("transport method should be scp sftp ftp fbtftp !")
+        exit(0)
     port = {
             'scp': '',
             'sftp':22,
@@ -543,10 +593,12 @@ def main():
             send_file = args.send_file
             user = getpass.getuser()
             host = socket.gethostname()
-    if args.transport != 'scp':
+    if args.transport != 'scp' and args.transport != 'fbtftp':
         password = getpass.getpass(prompt = "%s's pass word:" % '@'.join([user,host]))
     else:
         password = ''
+    if host == socket.gethostname():
+        host = 'localhost'
     connect=trans_method.get(args.transport)(host,port.get(args.transport),user,password)
     call_function = {
         'up':connect.upload,
@@ -558,19 +610,5 @@ def main():
 
 
 if __name__ == '__main__':
-    #connect=SFTPTransport('cn02',22,'cn02','airation')
-    #connect.download('/home/cn02/test/test.tar','/home/feng/test')
-    #connect.upload('/home/feng/Transfile/test.tar','/home/cn02/test')
-    #connect = SCPTransport('cn02',22,'cn02','')
-    #connect.download('/home/cn02/test/test.tar','/home/feng/test')
-    #connect.upload('/home/feng/test/test.tar','/home/cn02/test')
-    #connect.download('/home/cn02/test/test.tar','/home/feng/test')
-    #connect = FTPTransport('cn02',21,'cn02','airation')
-    #connect.download('/home/cn02/test/test.tar','home/feng/test')
-    #connect.upload('/home/feng/test/test.tar','/home/cn02/test')
-    #server_path=sys.argv[1]
-    #local_path=sys.argv[2]
-    #connect=FBTFTPTransport('127.0.0.1',1969,'octet')
-    #connect.download('/home/feng/test/test.tar','/home/feng/Transfile')
     main()
 

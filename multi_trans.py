@@ -1,4 +1,7 @@
 #!/usr/bin/python
+#This source is encapsulates many transmission method.
+#include scp, ftp, sftp and fbtftp.
+#Usage: multi_trans.py [-h] [-t transport] [-p port] send_file receive_path
 import sys
 import paramiko
 import os
@@ -25,6 +28,10 @@ ERROR = 1
 SUCCESS = 0
 
 class FileAttribute(object):
+    """
+    get file size and check whether the file is exist.
+    this class is used for local file.
+    """
     def __init__(self):
         self._file_size = 0
         self._file_exist = False
@@ -39,6 +46,10 @@ class FileAttribute(object):
 
 
 class SFTPFileAttribute(FileAttribute):
+    """
+    get file size and check whether the file is exist.
+    this class is used for remote server with sftp.
+    """
     def __init__(self, sftp):
         super(SFTPFileAttribute, self).__init__()
         self.sftp = sftp
@@ -58,6 +69,10 @@ class SFTPFileAttribute(FileAttribute):
 
 
 class FTPFileAttribute(FileAttribute):
+    """
+    get file size and check whether the file is exist.
+    this class is used for remote server with ftp.
+    """
     def __init__(self, ftp):
         super(FTPFileAttribute, self).__init__()
         self.ftp = ftp
@@ -76,6 +91,14 @@ class FTPFileAttribute(FileAttribute):
             return False
 
 class BaseTransport(object):
+    """
+    Base class, inherited by four subclasses.
+    SFTPTransport, SCPTransport, FTPTransport and FBTFTBTransport.
+    has two method.
+    _viewBar is used for displaying progress bar.
+    _progressBarShow is used for get downloading or uploading file size, and tranfer
+    it to _viewBar.
+    """
     def __init__(self, host, port, user, password):
         self._host = host
         self._port = port
@@ -144,6 +167,8 @@ class BaseTransport(object):
         else:
             self._viewBar(100, average_speed, get_size=file_receive_size/1024, total_size=file_size/1024, used_time=total_time)
         print("\n")
+
+
 
 class SFTPTransport(BaseTransport):
     def __init__(self, host, port, user, password):

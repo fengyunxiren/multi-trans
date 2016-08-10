@@ -444,7 +444,7 @@ class FBTFTPTransport(BaseTransport):
                 return ERROR
 
         file_open = open(path, 'wb')
-        thread.start_new_thread(self._progressBarShow, (path, self._options['tsize'], time.time()))
+        threading.Thread(target=self._progressBarShow, args=(path, self._options['tsize'], time.time())).start()
         while True:
             try:
                 self._client_socket.settimeout(self._timeout)

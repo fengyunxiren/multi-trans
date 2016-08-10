@@ -108,20 +108,36 @@ class BaseTransport(object):
 
 
     def _viewBar(self, count, rate, rate_units='Kb/s', get_size='', total_size='', used_time=''):
-        sys.stdout.write('\r%d%%' % count)
+        count_percent = '\r%d%%' % count
         if count < 10:
-            sys.stdout.write('  ')
-        elif count < 100:
-            sys.stdout.write(' ')
-        sys.stdout.write('[')
-        length_bar = 50
-        i = length_bar * count / 100
-        sys.stdout.write(i * '>' + (length_bar - i) * ' ')
-        sys.stdout.write(']  ')
-        sys.stdout.write('%s/%s Kb' % (get_size, total_size))
-        sys.stdout.write('  %6.2f ' % rate + rate_units)
-        sys.stdout.write('  %.0f s        ' % used_time)
+            count_percent += '  '
+        elif count <100:
+            count_percent += ' '
+
+        last_put = '%s/%sKb' % (get_size, total_size)
+        last_put += '  %6.2f' % rate + rate_units
+        last_put += '  %.0fs  ' % used_time
+
+        width = int(os.popen('stty size','r').read().split()[-1])
+        length_bar = width/2
+        i = length_bar * count /100
+        progress_bar = '[' + i * '>' + (length_bar-i) * ' ' + ']'
+        white_length = width - len(count_percent) - len(last_put) - len(progress_bar)
+        if white_length < 0:
+            white_length += len(progress_bar)
+            if white_length < 0:
+                sys.stdout.write(count_percent+last_put)
+                sys.stdout.flush()
+                return
+            white_space = white_length * ' '
+            sys.stdout.write(count_percent+white_space+last_put)
+            sys.stdout.flush()
+            return
+        white_space = white_length * ' '
+        sys.stdout.write(count_percent+progress_bar+white_space+last_put)
         sys.stdout.flush()
+        return
+
 
 
     def _progressBarShow(self, file_name, file_size, time_down_start, file_attribute=FileAttribute()):
@@ -164,8 +180,10 @@ class BaseTransport(object):
             average_speed /= 1024
             rate_units = 'Mb/s'
             self._viewBar(100, average_speed, rate_units, file_receive_size/1024, file_size/1024, total_time)
+            sys.stdout.flush()
         else:
-            self._viewBar(100, average_speed, get_size=file_receive_size/1024, total_size=file_size/1024, used_time=total_time)
+            elf._viewBar(100, average_speed, get_size=file_receive_size/1024, total_size=file_size/1024, used_time=total_time)
+            sys.stdout.flush()
         print("\n")
 
 

@@ -150,6 +150,7 @@ class BaseTransport(object):
             rate_time = time.time()
             if file_attribute.fileExist(file_name):
                 rate_size = file_attribute.getFileSize(file_name)
+                initial_size = rate_size
                 break
             if rate_time - time_down_start > 10:
                 print("File %s not exist in %s" % (base_name, base_dir))
@@ -174,15 +175,16 @@ class BaseTransport(object):
             time.sleep(1.0)
 
         total_time = time.time() - time_down_start
-        average_speed = file_size / 1024 / total_time
+        average_speed = (file_receive_size - initial_size) / 1024 / total_time
+        count = file_receive_size / (file_size / 100)
         rate_units = 'Kb/s'
         if average_speed > 1024:
             average_speed /= 1024
             rate_units = 'Mb/s'
-            self._viewBar(100, average_speed, rate_units, file_receive_size/1024, file_size/1024, total_time)
+            self._viewBar(count, average_speed, rate_units, file_receive_size/1024, file_size/1024, total_time)
             sys.stdout.flush()
         else:
-            elf._viewBar(100, average_speed, get_size=file_receive_size/1024, total_size=file_size/1024, used_time=total_time)
+            self._viewBar(count, average_speed, get_size=file_receive_size/1024, total_size=file_size/1024, used_time=total_time)
             sys.stdout.flush()
         print("\n")
 
@@ -330,14 +332,33 @@ class FTPTransport(BaseTransport):
                 self.download(trans_path, local_file)
         else:
             self._ftp.cwd(remote_dir)
-            file_handler = open(local_file, 'wb').write
-            file_size = self._ftp.size(remote_path)
+            self._ftp.voidcmd('TYPE I')
+            file_size = self._ftp.size(remote_file)
+            if os.path.exists(local_file):
+                local_size = os.stat(local_file).st_size
+            else:
+                local_size = 0
+            if local_size > file_size:
+                print("Warnning: The file you transfer is exist in local path, and is not match the remote file!")
+                print("If you want remote file, delete the local file or change the local path!")
+                return
+            elif local_size == file_size:
+                print("The file you transfer has already exist! so it has nonthing to do.")
+                return
+            conn = self._ftp.transfercmd('RETR %s' % remote_file, local_size)
+            file_handler = open(local_file, 'ab')
             time_down_start = time.time()
             threading.Thread(target=self._progressBarShow, args=(local_file, file_size, time_down_start)).start()
             try:
-                self._ftp.retrbinary('RETR %s' % remote_file, file_handler, bufsize)
+                while True:
+                    data = conn.recv(bufsize)
+                    if not data:
+                        break
+                    file_handler.write(data)
             except:
                 self._stop = True
+            file_handler.close()
+            conn.close()
 
 
 
@@ -351,19 +372,42 @@ class FTPTransport(BaseTransport):
                 trans_path = '/' + local_path.strip('/') + '/' + trans_file
                 self.upload(trans_path, save_path)
         else:
-            self._ftp.cwd(remote_path)
+            remote_file = os.path.basename(local_path)
             bufsize = 1024
-            file_name = '/' + remote_path.strip('/') + '/' + os.path.basename(local_path)
+            self._ftp.cwd(remote_path)
+            self._ftp.voidcmd('TYPE I')
             file_size = os.stat(local_path).st_size
+            try:
+                remote_size = self._ftp.size(remote_file)
+            except:
+                remote_size = 0
+
+            if remote_size > file_size:
+                print("Warnning: The file you transfer is exist in remote path, and is not match the local file!")
+                print("If you want upload it continue, please change the remote path!")
+                return
+            elif remote_size == file_size:
+                print("The file you transfer has already exist! so it has nonthing to do.")
+                return
+
+            file_handler = open(local_path, 'rb')
+            file_handler.seek(remote_size)
+            conn, _ = self._ftp.ntransfercmd('STOR %' % remote_file, remote_size)
             time_down_start = time.time()
             new_ftp = FTP()
             new_ftp.connect(self._host, self._port)
             new_ftp.login(self._user, self._password)
             file_attribute = FTPFileAttribute(new_ftp)
-            file_handler = open(local_path, 'rb')
-            thread.start_new_thread(self._ftp.storbinary, ('STOR %s' % os.path.basename(local_path), file_handler, bufsize))
-            self._progressBarShow(file_name, file_size, time_down_start, file_attribute)
+            thread.start_new_thread(self._progressBarShow, (file_name, file_size, time_down_start, file_attribute))
+            while True:
+                data = file_handler.read(bufsize)
+                if not data:
+                    break
+                conn.sendall(data)
+
+            conn.close()
             file_handler.close()
+            
             new_ftp.quit()
 
 
